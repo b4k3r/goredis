@@ -7,4 +7,11 @@ jobs:
     steps:
       - checkout
 
-      - run: go build
+      - run: dep ensure
+      - run:
+          name: Test (go test)
+          command: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - run:
+          name: Upload coverage data
+          command: bash <(curl -s https://codecov.io/bash)
