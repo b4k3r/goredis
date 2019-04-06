@@ -3,11 +3,9 @@ jobs:
   build:
     docker:
       - image: circleci/golang:1.12
-    working_directory: /go/src/github.com/b4k3r/goredis
     steps:
       - checkout
 
-      - run: dep ensure
       - run:
           name: Test (go test)
           command: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
