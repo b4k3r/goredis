@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,10 +13,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var ErrAuth = errors.New("(error) NOAUTH Authentication required.")
+
 type sessionHandler struct {
-	conn    io.ReadWriteCloser
-	logger  *logrus.Entry
-	storage map[string]string
+	conn       io.ReadWriteCloser
+	logger     *logrus.Entry
+	storage    map[string]string
+	authorized bool
 }
 
 func (s *sessionHandler) handle() {
@@ -46,6 +50,8 @@ func (s *sessionHandler) handle() {
 		}
 
 		switch strings.ToUpper(tokens[0]) {
+		case "AUTH":
+			err = s.authCommand(tokens[1:])
 		case "SET":
 			err = s.setCommand(tokens[1:])
 		case "GET":
@@ -53,9 +59,13 @@ func (s *sessionHandler) handle() {
 		case "PING":
 			err = s.pingCommand(tokens[1:])
 		case "QUIT":
-			err = s.quitCommand(tokens[1:])
+			return
 		default:
 			_, err = fmt.Fprintln(s.conn, "(error) unknown command")
+		}
+
+		if err == ErrAuth {
+			_, err = fmt.Fprintln(s.conn, err)
 		}
 
 		// http://teaching.idallen.com/cst8165/08w/notes/eof_handling.txt
@@ -66,10 +76,37 @@ func (s *sessionHandler) handle() {
 	}
 }
 
+func (s *sessionHandler) authCommand(tokens []string) error {
+	if len(tokens) != 1 {
+		_, err := fmt.Fprintln(s.conn, "(error) ERR wrong number of arguments for 'auth' command")
+		return err
+	}
+
+	if len(password) == 0 {
+		_, err := fmt.Fprintln(s.conn, "(error) ERR Client sent AUTH, but no password is set")
+		return err
+	}
+
+	// Secure compare?
+	if password == tokens[0] {
+		s.authorized = true
+		_, err := fmt.Fprintln(s.conn, "OK")
+		return err
+	}
+
+	s.authorized = false
+	_, err := fmt.Fprintln(s.conn, "(error) ERR invalid password")
+	return err
+}
+
 func (s *sessionHandler) setCommand(tokens []string) error {
 	if len(tokens) != 2 {
 		_, err := fmt.Fprintln(s.conn, "(error) ERR wrong number of arguments for 'set' command")
 		return err
+	}
+
+	if !s.authorized {
+		return ErrAuth
 	}
 
 	s.storage[tokens[0]] = strings.TrimSpace(tokens[1])
@@ -85,6 +122,10 @@ func (s *sessionHandler) getCommand(tokens []string) error {
 		return err
 	}
 
+	if !s.authorized {
+		return ErrAuth
+	}
+
 	value, ok := s.storage[tokens[0]]
 
 	if ok {
@@ -94,7 +135,6 @@ func (s *sessionHandler) getCommand(tokens []string) error {
 
 	_, err := fmt.Fprintln(s.conn, "(nil)")
 	return err
-
 }
 
 func (s *sessionHandler) pingCommand(tokens []string) error {
@@ -103,15 +143,10 @@ func (s *sessionHandler) pingCommand(tokens []string) error {
 		return err
 	}
 
-	_, err := fmt.Fprintln(s.conn, "PONG")
-	return err
-}
-
-func (s *sessionHandler) quitCommand(tokens []string) error {
-	if len(tokens) > 0 {
-		_, err := fmt.Fprintln(s.conn, "(error) ERR wrong number of arguments for 'quit' command")
-		return err
+	if !s.authorized {
+		return ErrAuth
 	}
 
-	return io.EOF
+	_, err := fmt.Fprintln(s.conn, "PONG")
+	return err
 }

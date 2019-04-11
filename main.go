@@ -9,9 +9,11 @@ import (
 )
 
 var port int
+var password string
 
 func init() {
 	flag.IntVar(&port, "port", 6379, "HTTP Port")
+	flag.StringVar(&password, "requirepass", "", "Password")
 }
 
 func main() {
@@ -26,6 +28,10 @@ func main() {
 
 	log.Infof("Listening on %d", port)
 
+	if len(password) > 0 {
+		log.Info("Server protected by password")
+	}
+
 	// TODO: Add mutex
 	storage := make(map[string]string)
 
@@ -39,6 +45,6 @@ func main() {
 		logger := log.WithField("remote", conn.RemoteAddr())
 		logger.Infoln("Serving")
 
-		go (&sessionHandler{conn, logger, storage}).handle()
+		go (&sessionHandler{conn, logger, storage, false}).handle()
 	}
 }
