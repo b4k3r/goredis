@@ -45,6 +45,6 @@ func main() {
 		logger := log.WithField("remote", conn.RemoteAddr())
 		logger.Infoln("Serving")
 
-		go (&sessionHandler{conn, logger, storage, false}).handle()
+		go (&sessionHandler{conn, logger, storage, len(password) == 0}).handle()
 	}
 }
